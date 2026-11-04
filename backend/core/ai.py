@@ -15,7 +15,9 @@ class GigaAI:
 
     async def send_message_chat(self, messages: list[Message], target_message: MessageResponse):
         async with GigaChat(
-            credentials=self.GIGA_KEY, verify_ssl_certs=False, model=self.model
+            credentials=self.GIGA_KEY,
+            verify_ssl_certs=False,
+            model=self.model,
         ) as client:
             history = [Messages(role=i.role, content=i.content) for i in messages]
             history.append(Messages(role=target_message.role, content=target_message.content))
@@ -24,7 +26,9 @@ class GigaAI:
 
     async def tokens_count(self, message: str):
         async with GigaChat(
-            credentials=self.GIGA_KEY, verify_ssl_certs=False, model=self.model
+            credentials=self.GIGA_KEY,
+            verify_ssl_certs=False,
+            model=self.model,
         ) as client:
             res = client.tokens_count(
                 input_=[message],

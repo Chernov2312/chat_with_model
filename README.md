@@ -1,4 +1,5 @@
 # Chat with model
+[![linter_test](https://github.com/Chernov2312/chat_with_model/actions/workflows/ci_linter_test.yml/badge.svg)](https://github.com/Chernov2312/chat_with_model/actions/workflows/ci_linter_test.yml)
 
 Проект чат-клиента на React/Vite и API на FastAPI с PostgreSQL и SQLAlchemy.
 Описание текущих API-ограничений и план для списка чатов находятся в

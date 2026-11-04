@@ -16,7 +16,9 @@ from sqlalchemy.orm import (
     mapped_column,
 )
 
-from config import settings
+from config import get_settings
+
+settings = get_settings()
 
 engine = create_async_engine(url=settings.db_url, echo=True)
 async_session_maker = async_sessionmaker(engine, expire_on_commit=False)

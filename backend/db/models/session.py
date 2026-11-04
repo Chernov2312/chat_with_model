@@ -1,12 +1,13 @@
 import uuid
 
 from sqlalchemy import Boolean, ForeignKey, Index, Integer, Text, desc, text
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from db.database import Base
 
 
 class Session(Base):
+    user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
     model_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("models.id"),
         nullable=False,
@@ -27,5 +28,7 @@ class Session(Base):
         nullable=False,
         server_default=text("false"),
     )
+
+    user: Mapped["User | None"] = relationship(back_populates="sessions")
 
     __table_args__ = (Index("idx_sessions_updated", desc("updated_at")),)

@@ -12,7 +12,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from config import settings
 from db.dao.user_dao import UserDao
 from db.models import User
-from db.models.user import UserRole
 from schemas.auth import UserLogin
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
@@ -52,7 +51,7 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None) -> s
 
 async def get_id_current_user(
     token: Annotated[str, Depends(oauth2_scheme)],
-) -> Tuple[uuid.UUID, UserRole]:
+) -> uuid.UUID:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -61,9 +60,8 @@ async def get_id_current_user(
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         sub = payload.get("sub")
-        role = payload.get("role")
-        if sub is None or role is None:
+        if sub is None:
             raise credentials_exception
     except (InvalidTokenError, KeyError, TypeError):
         raise credentials_exception
-    return (uuid.UUID(sub), role)
+    return uuid.UUID(sub)

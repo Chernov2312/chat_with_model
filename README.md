@@ -1,114 +1,77 @@
-# TodoList || PetProject
-[![linter_test](https://github.com/Chernov2312/ToDoList/actions/workflows/ci_linter_test.yml/badge.svg)](https://github.com/Chernov2312/ToDoList/actions/workflows/ci_linter_test.yml)
----
+# Chat with model
 
-### Предварительные требования
+Проект чат-клиента на React/Vite и API на FastAPI с PostgreSQL и SQLAlchemy.
+Описание текущих API-ограничений и план для списка чатов находятся в
+[Api.md](./Api.md).
 
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/)
-- [Git](https://git-scm.com/downloads)
+## Схема базы данных
 
-### Установка и запуск
+В приложении определены таблицы `users`, `models`, `sessions`, `messages`.
+Таблица `generations` удалена.
 
-1. Клонирование репозитория
+```mermaid
+erDiagram
+    USERS {
+        UUID id PK
+        VARCHAR username UK
+        VARCHAR email UK
+        VARCHAR password
+    }
 
-```bash
-git clone 
+    MODELS {
+        UUID id PK
+        TEXT provider
+        TEXT display_name
+        INTEGER context_window
+        BOOLEAN supports_streaming
+    }
+
+    SESSIONS {
+        UUID id PK
+        UUID user_id FK "nullable"
+        UUID model_id FK
+        TEXT system_prompt "nullable"
+        FLOAT temperature
+        INTEGER max_tokens
+        TEXT title "nullable"
+        BOOLEAN is_archived
+        TIMESTAMP created_at
+        TIMESTAMP updated_at
+    }
+
+    MESSAGES {
+        UUID id PK
+        UUID session_id FK
+        ENUM role "system | user | assistant | tool"
+        TEXT content
+        INTEGER token_count "nullable"
+        TIMESTAMP created_at
+        TIMESTAMP updated_at
+    }
+
+    USERS ||--o{ SESSIONS : "user_id"
+    MODELS ||--o{ SESSIONS : "model_id"
+    SESSIONS ||--o{ MESSAGES : "session_id, cascade delete"
 ```
 
-2. Переход в папку проекта
+ORM-связи доступны как `user.sessions` и `session.user`. `user_id` пока допускает
+`NULL`; создание сессии ещё не связывает её с владельцем. Добавление колонки в
+уже существующую таблицу требует миграции — `create_all()` не обновляет схему.
 
-```bash
-cd ToDoList
-```
-
-3. Настройка переменных окружения
-
-Linux/macOS
-
-```bash
-cp .env.example .env
-```
-
-Windows (PowerShell)
+## Запуск фронтенда
 
 ```powershell
-Copy-Item .env.example .env
+cd frontend
+npm install
+npm run dev
 ```
 
-4. Запуск проекта
-```bash
-docker-compose up --build
-```
+По умолчанию клиент обращается к API на `http://localhost:8000`. URL можно
+переопределить переменной `VITE_API_URL`.
 
----
-После запуска сервер будет доступен по адресу:
+## Текущее состояние
 
-- Сайт: http://127.0.0.1:8000/
-
-
----
-
-#### Функционал
-
-**1. Пользователь проходит регистрацию**
-
-Пользователь регистрируется в системе.
-
-**2. Задания**
-
-Пользователь может указывать сразу несколько заданий разной сложности, указывать им сроки выполнения
-
-**3. История заданий**
-
-После завершения результат сохраняется в историю пользователя. Для каждого задания доступны:
-- дата и время
-- выполнено/просрочено
-
----
-
-#### Установка зависимостей
-
-Для разработки
-
-```bash
-pip install -r requirements/dev.txt
-```
-
-Для запуска тестов
-
-```bash
-pip install -r requirements/test.txt
-```
-
----
-
-#### Запуск тестов
-
-Проверка flake8
-
-```bash
-flake8
-```
-
-Проверка black
-
-```bash
-black --check .
-```
-
-Тесты PyTest
-```bash
-python3 manage.py test
-```
-
----
-
-###### Разработчик
-
-```
-Максим Чернов
-```
-
----
-
-<small>© 2026 Work by Max</small>
+Фронтенд содержит вход/регистрацию, настройки нового чата и интерфейс диалога.
+Создание списка чатов, восстановление истории из списка, корректное владение
+сессиями и некоторые контракты API ещё требуют реализации. Подробный перечень
+и объявленные маршруты см. в [Api.md](./Api.md).

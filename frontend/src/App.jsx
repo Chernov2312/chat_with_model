@@ -13,37 +13,108 @@ function readStored(key) {
 }
 
 function App() {
+  const page = window.location.pathname;
   const [token, setToken] = useState(() => readStored(TOKEN_KEY));
   const [sessionId, setSessionId] = useState(() => readStored(SESSION_KEY));
+  const [sessions, setSessions] = useState([]);
+  const [sessionsLoading, setSessionsLoading] = useState(false);
   const [profile, setProfile] = useState(null);
   const [messages, setMessages] = useState([]);
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [isRegistering, setIsRegistering] = useState(false);
-  const [newEmail, setNewEmail] = useState("");
   const [model, setModel] = useState("GigaChat-3-Ultra");
   const [systemPrompt, setSystemPrompt] = useState("Ты полезный ассистент.");
   const [temperature, setTemperature] = useState("0.7");
   const [maxTokens, setMaxTokens] = useState("2048");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const abortRef = useRef(null);
+
+  useEffect(() => {
+    if (page === "/" && !token) {
+      window.location.replace("/login");
+    } else if (page === "/" || (page !== "/login" && page !== "/register" && page !== "/sessions")) {
+      window.location.replace(token ? "/sessions" : "/login");
+    } else if (page === "/sessions" && !token) {
+      window.location.replace("/login");
+    }
+  }, [page, token]);
 
   useEffect(() => {
     if (token) {
       apiRequest("/api/v1/users/me", { token })
         .then((user) => {
           setProfile(user);
-          setNewEmail(user.email || "");
         })
         .catch((cause) => setError(`Не удалось загрузить профиль: ${cause.message}`));
     } else {
       setProfile(null);
     }
   }, [token]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!token || !sessionId) {
+      setMessages([]);
+      setHistoryLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setHistoryLoading(true);
+    apiRequest(`/api/v1/sessions/${encodeURIComponent(sessionId)}/messages`, { token })
+      .then((history) => {
+        if (!Array.isArray(history?.messages)) {
+          throw new Error("Сервер вернул историю в неожиданном формате.");
+        }
+        if (!cancelled) setMessages(history.messages);
+      })
+      .catch((cause) => {
+        if (!cancelled) setError(`Не удалось загрузить историю чата: ${cause.message}`);
+      })
+      .finally(() => {
+        if (!cancelled) setHistoryLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [token, sessionId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!token || page !== "/sessions") {
+      setSessions([]);
+      setSessionsLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setSessionsLoading(true);
+    apiRequest("/api/v1/sessions", { token })
+      .then((result) => {
+        if (!Array.isArray(result)) {
+          throw new Error("Сервер вернул список сессий в неожиданном формате.");
+        }
+        if (!cancelled) setSessions(result);
+      })
+      .catch((cause) => {
+        if (!cancelled) setError(`Не удалось загрузить список чатов: ${cause.message}`);
+      })
+      .finally(() => {
+        if (!cancelled) setSessionsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [token, page]);
 
   function rememberToken(value) {
     setToken(value || "");
@@ -91,7 +162,10 @@ function App() {
         body: form,
       });
     });
-    if (result?.access_token) rememberToken(result.access_token);
+    if (result?.access_token) {
+      rememberToken(result.access_token);
+      window.location.assign("/sessions");
+    }
   }
 
   async function register(event) {
@@ -104,34 +178,15 @@ function App() {
         }),
       "Регистрация завершена.",
     );
-    if (result?.access_token) rememberToken(result.access_token);
-  }
-
-  async function loadProfile() {
-    const result = await runAction(() => apiRequest("/api/v1/users/me", { token }));
-    if (result) {
-      setProfile(result);
-      setNewEmail(result.email || "");
+    if (result?.access_token) {
+      rememberToken(result.access_token);
+      window.location.assign("/sessions");
     }
   }
 
   async function checkHealth() {
     const result = await runAction(() => apiRequest("/health"));
     if (result) setNotice(`API отвечает: ${result.status || "OK"}`);
-  }
-
-  async function updateProfile(event) {
-    event.preventDefault();
-    const result = await runAction(
-      () =>
-        apiRequest("/api/v1/users/me", {
-          method: "PATCH",
-          token,
-          body: JSON.stringify({ email: newEmail }),
-        }),
-      "Профиль обновлён.",
-    );
-    if (result) setProfile(result);
   }
 
   async function createSession(event) {
@@ -151,6 +206,7 @@ function App() {
       "Чат создан.",
     );
     if (result?.id) {
+      setSessions((items) => [result, ...items.filter((item) => item.id !== result.id)]);
       rememberSession(result.id);
       setMessages(Array.isArray(result.messages) ? result.messages : []);
     }
@@ -166,6 +222,7 @@ function App() {
       "Сессия удалена.",
     );
     if (result) {
+      setSessions((items) => items.filter((item) => item.id !== sessionId));
       rememberSession("");
       setMessages([]);
     }
@@ -174,7 +231,7 @@ function App() {
   async function sendMessage(event) {
     event.preventDefault();
     const content = message.trim();
-    if (!sessionId || !content || busy) return;
+    if (!sessionId || !content || busy || historyLoading) return;
     setMessage("");
     setError("");
     setNotice("");
@@ -213,24 +270,68 @@ function App() {
 
   function logout() {
     rememberToken("");
+    rememberSession("");
     setProfile(null);
-    setNotice("Токен удалён из браузера.");
+    window.location.assign("/login");
+  }
+
+  if (page === "/login" || page === "/register") {
+    const registering = page === "/register";
+    return (
+      <main className="app-shell auth-page">
+        <header className="topbar">
+          <a className="brand" href="/login"><span className="brand-mark">✳</span> dialog<span className="brand-muted">/</span>ai</a>
+          <a className="text-button" href={registering ? "/login" : "/register"}>
+            {registering ? "Уже есть аккаунт? Войти" : "Создать аккаунт"}
+          </a>
+        </header>
+        <section className="auth-page-content">
+          <div className="eyebrow"><span className="eyebrow-line" /> ЧАТ С МОДЕЛЬЮ <span className="eyebrow-dot">·</span> GIGACHAT</div>
+          <h1>{registering ? <>Создайте<br /><span>аккаунт.</span></> : <>С возвращением<br /><span>в диалог.</span></>}</h1>
+          <p className="hero-copy">{registering ? "Зарегистрируйтесь, чтобы начать общаться с моделью." : "Войдите в аккаунт и продолжите общение с моделью."}</p>
+          {(error || notice) && (
+            <div className={`feedback ${error ? "feedback-error" : "feedback-success"}`} role="status">
+              <span>{error ? "!" : "✓"}</span><p>{error || notice}</p>
+              <button onClick={() => { setError(""); setNotice(""); }} aria-label="Закрыть сообщение">×</button>
+            </div>
+          )}
+          <section className="panel auth-route-panel">
+            <div className="section-heading"><span className="step">01</span><h2>{registering ? "Регистрация" : "Вход"}</h2></div>
+            <form className="stack-form" onSubmit={registering ? register : login}>
+              {registering && <>
+                <label htmlFor="username">Имя пользователя</label>
+                <input id="username" autoComplete="username" minLength="3" maxLength="50" required value={username} onChange={(event) => setUsername(event.target.value)} />
+              </>}
+              <label htmlFor="email">Email</label>
+              <input id="email" type="email" autoComplete={registering ? "email" : "username"} required placeholder="you@example.com" value={email} onChange={(event) => setEmail(event.target.value)} />
+              <label htmlFor="password">Пароль</label>
+              <input id="password" type="password" autoComplete={registering ? "new-password" : "current-password"} minLength={registering ? 8 : undefined} required value={password} onChange={(event) => setPassword(event.target.value)} />
+              <button className="button button-primary button-wide" disabled={busy}>
+                {busy ? "Подождите..." : registering ? "Создать аккаунт" : "Войти"} <span>→</span>
+              </button>
+            </form>
+          </section>
+        </section>
+        <footer className="page-footer"><span>СОЗДАНО ДЛЯ ЛЮБОПЫТНЫХ</span><span>CHAT WITH MODEL <b>·</b> 2026</span></footer>
+      </main>
+    );
   }
 
   return (
     <main className="app-shell">
       <header className="topbar">
-        <a className="brand" href="#top"><span className="brand-mark">✳</span> dialog<span className="brand-muted">/</span>ai</a>
+        <a className="brand" href="/sessions"><span className="brand-mark">✳</span> dialog<span className="brand-muted">/</span>ai</a>
         <div className="topbar-right">
           <span className={`connection ${error ? "connection-error" : ""}`}>
             <i /> {error ? "Требуется внимание" : "API-клиент"}
           </span>
+          <a className="text-button" href="/sessions">Мои чаты</a>
           {token && <button className="button button-quiet" onClick={logout}>Выйти</button>}
         </div>
       </header>
 
       <section className="hero" id="top">
-        <div className="eyebrow"><span className="eyebrow-line" /> ЧАТ С МОДЕЛЬЮ <span className="eyebrow-dot">·</span> API V1</div>
+        <div className="eyebrow"><span className="eyebrow-line" /> ЧАТ С МОДЕЛЬЮ <span className="eyebrow-dot">·</span> GIGACHAT</div>
         <h1>Идеи становятся<br /><span>диалогом.</span></h1>
         <p className="hero-copy">Минималистичный интерфейс для общения с AI.<br />Создайте сессию и начните с чистого листа.</p>
         <div className="hero-decoration decoration-one" />
@@ -246,40 +347,34 @@ function App() {
 
       <div className="workspace">
         <aside className="sidebar">
-          <section className="panel auth-panel">
-            <div className="section-heading"><span className="step">01</span><h2>Аккаунт</h2></div>
-            {profile ? (
-              <div className="profile-content">
-                <div className="profile-badge">{(profile.email || "U").slice(0, 1).toUpperCase()}</div>
-                <div className="profile-details"><strong>{profile.username}</strong><span>{profile.email}</span></div>
-                <button className="icon-button" onClick={loadProfile} title="Обновить профиль">↻</button>
-                <form className="stack-form full-width" onSubmit={updateProfile}>
-                  <label htmlFor="update-email">Изменить email</label>
-                  <div className="inline-input"><input id="update-email" type="email" required value={newEmail} onChange={(e) => setNewEmail(e.target.value)} /><button className="button button-small" disabled={busy}>Сохранить</button></div>
-                </form>
-              </div>
+          <section className="panel sessions-panel">
+            <div className="section-heading"><span className="step">01</span><h2>Мои чаты</h2></div>
+            <button className="button button-primary button-wide" onClick={createSession} disabled={busy}>
+              ＋ <span>Новый чат</span>
+            </button>
+            {sessionsLoading ? <p className="panel-hint">Загрузка чатов...</p> : sessions.length === 0 ? (
+              <p className="panel-hint">У вас пока нет чатов. Создайте новый, чтобы начать.</p>
             ) : (
-              <form className="stack-form" onSubmit={isRegistering ? register : login}>
-                <p className="panel-hint">{isRegistering ? "Создайте аккаунт для защищённых операций." : "Войдите, чтобы пользоваться защищёнными операциями."}</p>
-                {isRegistering && <>
-                  <label htmlFor="username">Имя пользователя</label>
-                  <input id="username" autoComplete="username" minLength="3" maxLength="50" required value={username} onChange={(e) => setUsername(e.target.value)} />
-                </>}
-                <label htmlFor="email">Email</label>
-                <input id="email" type="email" autoComplete={isRegistering ? "email" : "username"} required placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} />
-                <label htmlFor="password">Пароль</label>
-                <input id="password" type="password" autoComplete={isRegistering ? "new-password" : "current-password"} minLength={isRegistering ? 8 : undefined} required value={password} onChange={(e) => setPassword(e.target.value)} />
-                <button className="button button-primary button-wide" disabled={busy}>{isRegistering ? "Создать аккаунт" : "Войти"} <span>→</span></button>
-                <button className="text-button" type="button" disabled={busy} onClick={() => setIsRegistering((value) => !value)}>{isRegistering ? "Уже есть аккаунт? Войти" : "Создать аккаунт"}</button>
-              </form>
+              <div className="session-list">
+                {sessions.map((item) => (
+                  <button
+                    className={`session-list-item ${item.id === sessionId ? "session-list-item-active" : ""}`}
+                    key={item.id}
+                    onClick={() => rememberSession(item.id)}
+                  >
+                    <span className="session-list-mark">✳</span>
+                    <span><strong>Чат с GigaChat</strong><small>{new Date(item.created_at).toLocaleDateString()}</small></span>
+                  </button>
+                ))}
+              </div>
             )}
           </section>
 
           <section className="panel session-panel">
-            <div className="section-heading"><span className="step">02</span><h2>Новый чат</h2></div>
+            <div className="section-heading"><span className="step">02</span><h2>Настройки чата</h2></div>
             <form className="stack-form" onSubmit={createSession}>
               <label htmlFor="model">Модель</label>
-              <input id="model" value={model} onChange={(e) => setModel(e.target.value)} required />
+              <input id="model" value={model} readOnly />
               <label htmlFor="prompt">Системный промпт</label>
               <textarea id="prompt" rows="3" value={systemPrompt} onChange={(e) => setSystemPrompt(e.target.value)} />
               <div className="two-fields">
@@ -292,20 +387,16 @@ function App() {
           </section>
 
           <section className="panel profile-panel">
-            <div className="section-heading"><span className="step">03</span><h2>Состояние</h2></div>
-            <div className="status-row"><span>Авторизация</span><span className={token ? "status-value active" : "status-value"}><i />{token ? "Активна" : "Не выполнена"}</span></div>
-            <div className="status-row"><span>Текущая сессия</span><span className="status-value">{sessionId ? "Подключена" : "Не выбрана"}</span></div>
+            <div className="section-heading"><span className="step">03</span><h2>Аккаунт</h2></div>
+            <div className="profile-details"><strong>{profile?.username || "Пользователь"}</strong><span>{profile?.email || ""}</span></div>
             <div className="profile-actions"><button className="text-button" onClick={checkHealth} disabled={busy}>Проверить API</button></div>
-            <div className="profile-actions">
-              <button className="text-button" onClick={loadProfile} disabled={!token || busy}>Получить профиль</button>
-              <a className="text-button" href={`${import.meta.env.VITE_API_URL || "http://localhost:8000"}/docs`} target="_blank" rel="noreferrer">API Docs ↗</a>
-            </div>
+            <div className="profile-actions"><a className="text-button" href={`${import.meta.env.VITE_API_URL || "http://localhost:8000"}/docs`} target="_blank" rel="noreferrer">API Docs ↗</a></div>
           </section>
         </aside>
 
         <section className="chat-panel">
           <div className="chat-header">
-            <div><div className="chat-title"><span className="chat-title-mark">✳</span> Диалог <span className="live-dot" /></div><div className="chat-subtitle">{sessionId ? "Активный чат" : "Новая беседа"}</div></div>
+            <div><div className="chat-title"><span className="chat-title-mark">✳</span> Диалог <span className="live-dot" /></div><div className="chat-subtitle">{historyLoading ? "Загрузка истории..." : sessionId ? "Активный чат" : "Новая беседа"}</div></div>
             <div className="chat-meta"><span className="model-indicator" />{model}</div>
           </div>
           <div className="chat-body">
@@ -313,7 +404,7 @@ function App() {
               <div className="empty-state">
                 <div className="empty-orbit"><span>✳</span><i /><b /></div>
                 <h3>С чего начнём?</h3>
-                <p>Создайте сессию слева, чтобы начать диалог.<br />Ваш следующий вопрос может привести куда угодно.</p>
+                <p>Выберите существующий чат или создайте новый.<br />Ваш следующий вопрос может привести куда угодно.</p>
                 <div className="suggestions">
                   {["Помоги придумать идею", "Объясни что-нибудь сложное", "Напиши небольшой рассказ"].map((item) => <button key={item} onClick={() => setMessage(item)}>{item}<span>↗</span></button>)}
                 </div>
@@ -331,8 +422,8 @@ function App() {
             )}
           </div>
           <form className="composer" onSubmit={sendMessage}>
-            <textarea value={message} onChange={(e) => setMessage(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(e); } }} placeholder={sessionId ? "Напишите сообщение..." : "Сначала создайте или откройте сессию"} disabled={!sessionId || busy} rows="1" />
-            <div className="composer-footer"><span><kbd>↵</kbd> отправить <span className="hint-divider">·</span> <kbd>⇧ ↵</kbd> новая строка</span><button className="send-button" type="submit" disabled={!sessionId || !message.trim() || busy} aria-label="Отправить">↑</button></div>
+            <textarea value={message} onChange={(e) => setMessage(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(e); } }} placeholder={historyLoading ? "Загружается история чата..." : sessionId ? "Напишите сообщение..." : "Сначала создайте или откройте сессию"} disabled={!sessionId || busy || historyLoading} rows="1" />
+            <div className="composer-footer"><span><kbd>↵</kbd> отправить <span className="hint-divider">·</span> <kbd>⇧ ↵</kbd> новая строка</span><button className="send-button" type="submit" disabled={!sessionId || !message.trim() || busy || historyLoading} aria-label="Отправить">↑</button></div>
           </form>
           <div className="chat-footnote">Ответы AI могут быть неточными. Проверяйте важную информацию.</div>
         </section>

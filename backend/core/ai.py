@@ -4,7 +4,7 @@ from gigachat import Chat, GigaChat, Messages
 
 from config import get_settings
 from db.models import Message
-from schemas.message import MessageResponse
+from schemas.message import MessageRequest
 
 
 class GigaAI:
@@ -13,15 +13,23 @@ class GigaAI:
         self.GIGA_KEY = settings.GIGA_KEY
         self.model = "GigaChat-3-Ultra"
 
-    async def send_message_chat(self, messages: list[Message], target_message: MessageResponse):
+    async def send_message_chat(
+        self,
+        messages: list[Message],
+        target_message: MessageRequest,
+        system_prompt: str | None = None,
+    ):
         async with GigaChat(
             credentials=self.GIGA_KEY,
             verify_ssl_certs=False,
             model=self.model,
         ) as client:
-            history = [Messages(role=i.role, content=i.content) for i in messages]
-            history.append(Messages(role=target_message.role, content=target_message.content))
-            async for chunk in client.astream(Chat(messages=history)):
+            history = []
+            if system_prompt:
+                history.append(Messages(role="system", content=system_prompt))
+            history.extend(Messages(role=i.role, content=i.content) for i in messages)
+            history.append(Messages(role="user", content=target_message.content))
+            async for chunk in client.astream(Chat(messages=history, update_interval=0.001)):
                 yield chunk.choices[0].delta.content
 
     async def tokens_count(self, message: str):

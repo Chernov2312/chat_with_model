@@ -9,11 +9,12 @@ from jwt import InvalidTokenError
 from pwdlib import PasswordHash
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from config import settings
+from config import get_settings
 from db.dao.user_dao import UserDao
 from db.models import User
 from schemas.auth import UserLogin
 
+settings = get_settings()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 password_hash = PasswordHash.recommended()
 

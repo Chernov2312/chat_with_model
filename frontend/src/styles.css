@@ -88,6 +88,16 @@ textarea { resize: vertical; line-height: 1.5; }
 .status-value.active { color: var(--lime); }
 .status-value i { width: 5px; height: 5px; }
 .profile-actions { display: flex; justify-content: space-between; padding-top: 7px; }
+.auth-page-content { width: min(440px, 100%); margin: 55px auto 70px; }
+.auth-route-panel { margin-top: 25px; padding: 24px; }
+.session-list { display: flex; flex-direction: column; gap: 5px; max-height: 270px; overflow-y: auto; margin-top: 14px; }
+.session-list-item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px; border: 1px solid transparent; border-radius: 6px; color: #aeb4bd; background: transparent; text-align: left; }
+.session-list-item:hover, .session-list-item-active { border-color: #343c47; background: #1d232b; }
+.session-list-item-active { color: var(--lime); }
+.session-list-mark { color: var(--lime); }
+.session-list-item > span:last-child { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.session-list-item strong { font-size: 10px; font-weight: 600; }
+.session-list-item small { color: var(--muted); font-size: 9px; }
 .chat-panel { min-height: 720px; display: flex; flex-direction: column; overflow: hidden; }
 .chat-header { min-height: 62px; display: flex; justify-content: space-between; align-items: center; padding: 0 20px; border-bottom: 1px solid #ffffff0c; }
 .chat-title { display: flex; align-items: center; gap: 8px; font: 600 12px Manrope, sans-serif; }
@@ -155,4 +165,6 @@ kbd { color: #9ca3ad; font: 8px "DM Mono", monospace; }
   .message-list { padding: 20px 14px; }
   .composer { margin: 0 9px; }
   .page-footer { font-size: 7px; }
+  .auth-page-content { margin: 38px auto 50px; }
+  .auth-route-panel { padding: 18px; }
 }

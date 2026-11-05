@@ -17,10 +17,9 @@ ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
 @user_router.get("/me", status_code=status.HTTP_200_OK)
 async def get_me(
     session: AsyncSession = Depends(get_session),
-    current_user: uuid.UUID = Depends(get_id_current_user),
+    user_id: uuid.UUID = Depends(get_id_current_user),
 ) -> UserReadResponse:
-    current_user_id = current_user[0]
-    user = await UserDao.get_by_id(session=session, target_id=current_user_id)
+    user = await UserDao.get_by_id(session=session, target_id=user_id)
     return user
 
 
@@ -28,13 +27,12 @@ async def get_me(
 async def update_me(
     update_user: UserUpdateRequest,
     session: AsyncSession = Depends(get_session),
-    current_user: tuple[uuid.UUID, str] = Depends(get_id_current_user),
+    user_id: uuid.UUID = Depends(get_id_current_user),
 ) -> UserReadResponse:
-    current_user_id = current_user[0]
     try:
         user: User = await UserDao.update_by_id(
             session=session,
-            target_id=current_user_id,
+            target_id=user_id,
             data=update_user.model_dump(exclude_unset=True),
         )
     except IntegrityError:

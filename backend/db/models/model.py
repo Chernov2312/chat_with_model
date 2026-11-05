@@ -1,10 +1,13 @@
-from sqlalchemy import Boolean, Integer, Text, text
+import uuid
+
+from sqlalchemy import Boolean, ForeignKey, Integer, Text, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from db.database import Base
 
 
 class Model(Base):
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
     provider: Mapped[str] = mapped_column(Text, nullable=False)
     display_name: Mapped[str] = mapped_column(Text, nullable=False)
     context_window: Mapped[int] = mapped_column(Integer, nullable=False)

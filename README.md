@@ -1,5 +1,5 @@
 # Chat with model
-
+[![linter_test](https://github.com/Chernov2312/chat_with_model/actions/workflows/ci_linter_test.yml/badge.svg)](https://github.com/Chernov2312/chat_with_model/actions/workflows/ci_linter_test.yml)
 Веб-приложение для общения с GigaChat: frontend на React/Vite, API на FastAPI,
 хранение пользователей, сессий и истории в PostgreSQL.
 
